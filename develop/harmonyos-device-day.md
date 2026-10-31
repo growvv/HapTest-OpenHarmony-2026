@@ -20,30 +20,42 @@ HAPTEST_E2E_SERIAL=<serial> npm run e2e
 - 失败 → **停在这里修**。jank 测量建立在 observe/swipe 可用之上；链路不绿，测量出来的数没有意义。
 - 已知要盯的点：`observe` 里 `pages[0]` 可能取到输入法页（评审 M5）、`SearchField` 歧义会直接失败（M9）。
 
-## 3. 探测帧率来源
+## 3. 探测帧数据来源
 
 ```sh
 node bin/haptest harmony probe
 ```
 
-把 `raw` 原样贴到下面（截断到 4KB 也算）。**这一步的产物就是解析器的规格**。
+DevEco 逆向结论（`develop/deveco-perf-sources.md`）给出的候选，按优先级：
+
+1. `hitrace` + 本地 `trace_streamer`（首选）
+   - `hitrace --trace_begin graphic ability app` / `--trace_finish -o`
+   - `ls /Applications/DevEco-Studio.app/Contents/tools/profiler/dic_server/trace_streamer`
+2. `hiprofiler_cmd -s` / `pidof hiprofiler_plugins`（gRPC 路径的前置，只探测不实现）
+3. `sp_daemon`（开发板工具，商业机大概率没有）
+
+把每条命令的原始输出贴到下面（截断 4KB 也算）。**这一步的产物就是解析器的规格**。
 
 ```
 ### 设备
 serial / 型号 / OpenHarmony 版本 / 刷新率：
+### hitrace
+raw:
+### trace_streamer
+路径存在？版本（-v）：
+### hiprofiler
+raw:
 ### sp_daemon
-raw:
-### GP_daemon_fps
-raw:
-### hidumper -s RenderService
-raw:
-### hilog（若前三者都不可用）
 raw:
 ```
 
-## 4. 决定实现哪几个解析器
+## 4. 采一次真 trace
 
-按 `2026-11-01-harmonyos-jank-measurement-design.md` 第 4 节的降级链，只实现 `probe` 认出来的那个来源。一个来源一个文件，没认出来的不注册。
+```sh
+node bin/haptest harmony swipe --from <x1,y1> --to <x2,y2> --measure
+```
+
+跑完把 `.htrace` 留下的路径、`sqlite3 out.db ".tables"`、以及帧表的 `.schema` 贴回本文。**帧表 SQL 照这份 schema 写**，不要凭 DevEco 的 PO 字段名猜表名。
 
 ## 5. 数值可信性
 

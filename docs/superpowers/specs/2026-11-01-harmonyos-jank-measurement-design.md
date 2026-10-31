@@ -64,9 +64,10 @@ probeMetrics()
 export interface FrameStat {
     frameNo: number;
     vsync?: number;
-    startTime: number;      // ns
-    duration: number;       // ns
-    jankFlag: boolean;
+    ts: number;             // ns, frame_slice.ts
+    dur: number;            // ns, frame_slice.dur
+    flag: number;           // frame_slice.flag，jank 语义待真机确认
+    typeDesc?: string;      // frame_slice.type_desc
 }
 
 export interface FrameSample {
@@ -130,10 +131,32 @@ haptest harmony swipe --from x,y --to x,y --measure  # result 里多一个 trace
 | `FrameSource` 接口 + 注册表 + 降级链 | ✅ | — |
 | `trace()` + `--measure` 管线 + `UNSUPPORTED_METRIC` 语义 | ✅ | — |
 | htrace 源的命令拼接与文件搬运 | ✅（命令来自 DevEco 常量） | 验证 |
-| trace → SQLite 的帧表查询 | ❌ | ✅ 需要真 trace 才知道表名/字段 |
+| trace → SQLite 的帧表查询 | ✅（schema 已实测，见下） | 验证行内容 |
 | 数值正确性 | ❌ | ✅ |
 
-**帧表 SQL 不写**。真机第一次跑 `probe` + 一次 `--measure`，把 `.htrace` 与 `sqlite3 out.db ".tables"` 贴进 `develop/harmonyos-jank.md`，再照那份 schema 写查询——这是本设计唯一的硬顺序。
+`trace_streamer` 建库 schema 已经实测拿到（喂空表头 trace 即可），`frame_slice` 的列是固定的：
+
+```sql
+CREATE TABLE frame_slice(
+  id INT, ts INT, vsync INT, ipid INT, itid INT, callstack_id INT,
+  dur INT, src TEXT, dst INT, type INT, type_desc TEXT, flag INT,
+  depth INT, frame_no INT
+);
+CREATE TABLE hidump(id INT, ts INT, fps INT);
+```
+
+所以查询可以直接写：
+
+```sql
+SELECT frame_no, vsync, ts, dur, flag, type_desc, ipid
+FROM frame_slice
+WHERE ipid = ?          -- 目标进程
+  AND ts BETWEEN ? AND ?  -- 动作窗口
+ORDER BY ts;
+```
+
+**仍然未知的只有枚举值**：`flag` 取什么值代表 jank、`type_desc` 的字符串集合（`data_type` 表要真实 trace 才填）。真机第一次跑完，把 `SELECT DISTINCT flag, type_desc FROM frame_slice` 贴进 `develop/harmonyos-jank.md`，映射表就定了——这是本设计唯一的硬顺序。
+
 
 ## 5. 验收
 

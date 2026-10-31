@@ -119,11 +119,47 @@ DYLD_LIBRARY_PATH=./lib ./trace_streamer trace.htrace -m <metrics> # 按指标�
 
 **推荐 A**：`hitrace` 是系统自带命令（不像 `sp_daemon` 是开发板产物），`trace_streamer` 已经躺在 DevEco 里且实测能跑。先拿 A 拿到"逐帧 + jank"，等真需要实时 fps 流再上 B。
 
-## 8. 未验证（需要真机）
+## 8. 实测：trace_streamer 的库 schema（不需要真机）
 
-- `hitrace` 在 JUY-AL50 上是否可用、`graphic` 分类是否真的产出 vsync/frame 切片。
-- `trace_streamer` 解析出的表名与字段（`jank_tag` 在二进制里出现过，但 schema 没跑过真 trace）。
+喂一个**只有表头的空 trace** 就能让它建库，schema 与数据无关：
+
+```sh
+printf '# tracer: nop\n#\n# entries-in-buffer/entries-written: 0/0   #P:8\n#\n#           TASK-PID     CPU#  |||||  TIMESTAMP  FUNCTION\n#              | |         |   |||||     |         |\n' > min.htrace
+D=/Applications/DevEco-Studio.app/Contents/tools/profiler/dic_server
+DYLD_LIBRARY_PATH="$D/lib" "$D/trace_streamer" min.htrace -e out.db
+sqlite3 out.db ".tables"
+```
+
+得到 **92 张表**，覆盖：`frame_slice`/`frame_maps`/`dynamic_frame`、`hidump`、`app_startup`、`cpu_usage`/`sched_slice`/`thread_state`、`memory_*`（7 张）、`diskio`/`file_system_sample`、`network*`、`gpu_slice`、`xpower_*`（7 张）、`js_heap_*`（9 张）、`native_hook*`/`ebpf_callstack`、`perf_*`（5 张）、`hisys_*`、`animation`、`syscall`、`bio_latency_sample`、`dma_fence`、`smaps`、`symbols`。
+
+关键四张：
+
+```sql
+CREATE TABLE frame_slice(
+  id INT, ts INT, vsync INT, ipid INT, itid INT, callstack_id INT,
+  dur INT, src TEXT, dst INT, type INT, type_desc TEXT, flag INT,
+  depth INT, frame_no INT
+);
+CREATE TABLE frame_maps(id INT, src_row INT, dst_row INT);
+CREATE TABLE hidump(id INT, ts INT, fps INT);                 -- FPS 采样序列
+CREATE TABLE app_startup(                                      -- 冷启动分段
+  id INT, call_id INT, ipid INT, tid INT,
+  start_time INT, end_time INT, start_name INT, packed_name TEXT
+);
+CREATE TABLE dynamic_frame(id INT, x INT, y INT, width INT, height INT,
+                           alpha TEXT, name TEXT, end_time INT);
+```
+
+即：**`frame_slice.dur` + `flag` + `type_desc` 就是 jank 判定的全部输入**，`hidump(ts, fps)` 是独立的 FPS 流。二进制里还能看到 `frame_data` / `frame_dynamic_data` / `frame_animation_data` 三个数据源名与 `AnimationFilter`。
+
+未取到：`data_type(typeId, desc)` 与 `data_dict` 是空表，由真实 trace 填充——所以 `flag` 的取值、`type_desc` 的字符串枚举仍需一份真 trace 才能确认（但**表名和列名不再是未知**）。
+
+## 9. 未验证（需要真机）
+
+- `hitrace` 在 JUY-AL50 上是否可用、`graphic` 分类是否真的产出 `frame_slice` 行。
+- `flag` / `type_desc` 的具体取值与 jank 语义（表结构已知，枚举未知）。
 - `hiprofiler_cmd` / `hiprofiler_plugins` 在商业 HarmonyOS（非 OpenHarmony）上是否存在。
 - `hidumper -s RenderService` 是否能给出 fps（DevEco 用的是 `hidump-plugin`，不是这条）。
 
 这四条都只能靠 `haptest harmony probe` 在真机上一次性问清楚——正好是 `develop/harmonyos-device-day.md` 第 3 步要做的事。
+

@@ -55,7 +55,12 @@ raw:
 node bin/haptest harmony swipe --from <x1,y1> --to <x2,y2> --measure
 ```
 
-跑完把 `.htrace` 留下的路径、`sqlite3 out.db ".tables"`、以及帧表的 `.schema` 贴回本文。**帧表 SQL 照这份 schema 写**，不要凭 DevEco 的 PO 字段名猜表名。
+跑完把 `.htrace` 留下的路径、`sqlite3 out.db ".tables"`、以及帧表的 `.schema` 贴回本文。schema 已经实测过（见 `develop/deveco-perf-sources.md` §8），真机只需要补**枚举值**：
+
+```sh
+sqlite3 out.db "SELECT DISTINCT flag, type_desc FROM frame_slice;"
+sqlite3 out.db "SELECT frame_no, ts, dur, flag, type_desc FROM frame_slice ORDER BY ts LIMIT 20;"
+```
 
 ## 5. 数值可信性
 

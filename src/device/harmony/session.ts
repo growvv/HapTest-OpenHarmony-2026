@@ -143,7 +143,7 @@ export function discoverHarmonyDevices(
     }
 }
 
-export class HarmonyDeviceSession {
+export class HarmonyDevice {
     private closed = false;
     private closing?: Promise<void>;
     private actionTail: Promise<void> = Promise.resolve();
@@ -161,7 +161,7 @@ export class HarmonyDeviceSession {
     static async connect(
         options: { serial?: string } = {},
         dependencies: HarmonySessionDependencies = defaults,
-    ): Promise<HarmonyDeviceSession> {
+    ): Promise<HarmonyDevice> {
         let targets: HdcTargetInfo[];
         try {
             targets = dependencies.listTargets();
@@ -200,7 +200,7 @@ export class HarmonyDeviceSession {
             tempDir = dependencies.makeTempDir();
             device = dependencies.createDevice(serial, tempDir);
             await device.connect();
-            return new HarmonyDeviceSession(serial, device, tempDir, dependencies, lease ?? { release: () => {} });
+            return new HarmonyDevice(serial, device, tempDir, dependencies, lease ?? { release: () => {} });
         } catch (error) {
             activeSerials.delete(serial);
             lease?.release();

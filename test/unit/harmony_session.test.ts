@@ -7,7 +7,7 @@ import { Component } from '../../src/model/component';
 import { Hap } from '../../src/model/hap';
 import { HdcTargetInfo } from '../../src/device/hdc';
 import { HarmonyDeviceError } from '../../src/device/harmony/errors';
-import { HarmonyDeviceSession, HarmonySessionDependencies } from '../../src/device/harmony/session';
+import { HarmonyDevice, HarmonySessionDependencies } from '../../src/device/harmony/session';
 import { KeyCode } from '../../src/model/key_code';
 
 const online: HdcTargetInfo = { serial: 'device-1', transport: 'USB', state: 'Connected', host: 'localhost', type: 'hdc' };
@@ -101,8 +101,8 @@ const openSessions: Array<{ close(): Promise<void> }> = [];
 async function connectSession(
     options: { serial?: string },
     dependencies: HarmonySessionDependencies,
-): Promise<HarmonyDeviceSession> {
-    const session = await HarmonyDeviceSession.connect(options, dependencies);
+): Promise<HarmonyDevice> {
+    const session = await HarmonyDevice.connect(options, dependencies);
     openSessions.push(session);
     return session;
 }
@@ -112,16 +112,16 @@ afterEach(async () => {
     for (const session of openSessions.splice(0)) await session.close();
 });
 
-describe('HarmonyDeviceSession', () => {
+describe('HarmonyDevice', () => {
     it('returns domain errors for absent, ambiguous, offline and unavailable HDC targets', async () => {
-        await expect(HarmonyDeviceSession.connect({}, setup([]).dependencies)).rejects.toMatchObject({ code: 'NO_DEVICE' });
-        await expect(HarmonyDeviceSession.connect({}, setup([online, { ...online, serial: 'device-2' }]).dependencies))
+        await expect(HarmonyDevice.connect({}, setup([]).dependencies)).rejects.toMatchObject({ code: 'NO_DEVICE' });
+        await expect(HarmonyDevice.connect({}, setup([online, { ...online, serial: 'device-2' }]).dependencies))
             .rejects.toMatchObject({ code: 'MULTIPLE_DEVICES' });
-        await expect(HarmonyDeviceSession.connect({ serial: offline.serial }, setup([offline]).dependencies))
+        await expect(HarmonyDevice.connect({ serial: offline.serial }, setup([offline]).dependencies))
             .rejects.toMatchObject({ code: 'DEVICE_OFFLINE' });
         const failed = setup();
         failed.dependencies.listTargets = () => { throw new Error('missing hdc'); };
-        await expect(HarmonyDeviceSession.connect({}, failed.dependencies)).rejects.toMatchObject({ code: 'HDC_UNAVAILABLE' });
+        await expect(HarmonyDevice.connect({}, failed.dependencies)).rejects.toMatchObject({ code: 'HDC_UNAVAILABLE' });
     });
 
     it('connects explicitly, observes tree and screenshot, and cleans up on close', async () => {
@@ -229,7 +229,7 @@ describe('HarmonyDeviceSession', () => {
     it('rejects a second owner and releases the serial after a failed connection', async () => {
         const first = setup();
         const session = await connectSession({ serial: online.serial }, first.dependencies);
-        await expect(HarmonyDeviceSession.connect({ serial: online.serial }, setup().dependencies))
+        await expect(HarmonyDevice.connect({ serial: online.serial }, setup().dependencies))
             .rejects.toMatchObject({ code: 'DEVICE_BUSY' });
         await session.close();
 
@@ -239,7 +239,7 @@ describe('HarmonyDeviceSession', () => {
             connect: async () => { throw new Error('RPC failed'); },
             disconnect: vi.fn(async () => {}),
         });
-        await expect(HarmonyDeviceSession.connect({ serial: online.serial }, failed.dependencies))
+        await expect(HarmonyDevice.connect({ serial: online.serial }, failed.dependencies))
             .rejects.toMatchObject({ code: 'CONNECT_FAILED' });
         const retry = setup();
         const retrySession = await connectSession({ serial: online.serial }, retry.dependencies);

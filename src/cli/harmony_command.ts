@@ -2,6 +2,7 @@ import fs from 'fs';
 import { doctorHarmonyDevices, HarmonyDoctorReport } from '../device/harmony/doctor';
 import { HarmonyDeviceError, HarmonyDeviceErrorCode } from '../device/harmony/errors';
 import { HarmonyDevice, HarmonyObservation } from '../device/harmony/session';
+import { HarmonySelector } from '../device/harmony/selectors';
 import { Hdc, HdcTargetInfo } from '../device/hdc';
 
 export interface CliResult {
@@ -163,9 +164,65 @@ function summarizeObservation(observation: HarmonyObservation, screenshotPath?: 
     };
 }
 
+const KEY_NAMES = ['BACK', 'HOME', 'ENTER', 'DELETE', 'SPACE', 'TAB', 'ESCAPE', 'UP', 'DOWN', 'LEFT', 'RIGHT'] as const;
+type KeyName = typeof KEY_NAMES[number];
+
+class CliUsageError extends Error {}
+
+function numberFlag(flags: Flags, name: string): number | undefined {
+    const raw = flags[name];
+    if (raw === undefined) return undefined;
+    if (typeof raw !== 'string' || !/^-?\d+$/.test(raw)) throw new CliUsageError(`--${name} requires an integer`);
+    return Number(raw);
+}
+
+function pointFlag(flags: Flags, name: string): { x: number; y: number } {
+    const match = stringFlag(flags, name)?.match(/^(-?\d+),(-?\d+)$/);
+    if (!match) throw new CliUsageError(`--${name} requires <x>,<y>`);
+    return { x: Number(match[1]), y: Number(match[2]) };
+}
+
+function selectorFrom(flags: Flags): HarmonySelector | undefined {
+    const selector: HarmonySelector = {};
+    const id = stringFlag(flags, 'id');
+    const text = stringFlag(flags, 'text');
+    const textContains = stringFlag(flags, 'text-contains');
+    const hint = stringFlag(flags, 'hint');
+    const name = stringFlag(flags, 'name');
+    if (id !== undefined) selector.id = id;
+    if (text !== undefined) selector.text = text;
+    if (textContains !== undefined) selector.textContains = textContains;
+    if (hint !== undefined) selector.hint = hint;
+    if (name !== undefined) selector.name = name;
+    return Object.keys(selector).length > 0 ? selector : undefined;
+}
+
+function assertExpectation(observation: HarmonyObservation, flags: Flags): void {
+    const expectedBundle = stringFlag(flags, 'expect-bundle');
+    if (expectedBundle && observation.bundleName !== expectedBundle) {
+        throw new HarmonyDeviceError('STALE_OBSERVATION', 'The foreground app does not match --expect-bundle.', {
+            expected: expectedBundle,
+            actual: observation.bundleName,
+        });
+    }
+    const expectedSig = stringFlag(flags, 'expect-sig');
+    if (expectedSig && observation.tree?.getContentSig() !== expectedSig) {
+        throw new HarmonyDeviceError('STALE_OBSERVATION', 'The screen changed since the observation you passed.', {
+            expected: expectedSig,
+            actual: observation.tree?.getContentSig(),
+        });
+    }
+}
+
+function positional(positionals: string[], name: string): string {
+    const value = positionals[0];
+    if (!value) throw new CliUsageError(`${name} is required`);
+    return value;
+}
+
 export async function runHarmonyCli(argv: string[], deps: HarmonyCliDeps = defaultDeps): Promise<CliResult> {
     const [command, ...rest] = argv;
-    const { flags } = parseArgs(rest);
+    const { flags, positionals } = parseArgs(rest);
     try {
         switch (command) {
             case 'doctor': {
@@ -187,10 +244,70 @@ export async function runHarmonyCli(argv: string[], deps: HarmonyCliDeps = defau
             case 'apps':
                 return await withDevice(deps, flags, async (device) =>
                     ok({ ok: true, apps: device.findApps(stringFlag(flags, 'query') ?? '') }));
+            case 'tap': {
+                const selector = selectorFrom(flags);
+                const x = numberFlag(flags, 'x');
+                const y = numberFlag(flags, 'y');
+                const hasPoint = x !== undefined || y !== undefined;
+                if (Boolean(selector) === hasPoint) throw new CliUsageError('provide either selector flags or --x/--y, not both');
+                if (hasPoint && (x === undefined || y === undefined)) throw new CliUsageError('--x and --y are required together');
+                const index = numberFlag(flags, 'index');
+                return await withDevice(deps, flags, async (device) => {
+                    const before = await device.observe();
+                    assertExpectation(before, flags);
+                    const result = selector
+                        ? await device.tap({ selector, index })
+                        : await device.tap({ x, y, observationId: before.observationId });
+                    return ok({ ok: true, result, observation: summarizeObservation(await device.observe()) });
+                });
+            }
+            case 'type': {
+                const text = positional(positionals, 'text');
+                const allowNewlines = flags['allow-newlines'] === true;
+                return await withDevice(deps, flags, async (device) => {
+                    const before = await device.observe();
+                    assertExpectation(before, flags);
+                    return ok({ ok: true, result: await device.typeText(text, { allowNewlines }) });
+                });
+            }
+            case 'key': {
+                const key = positional(positionals, 'key').toUpperCase();
+                if (!KEY_NAMES.includes(key as KeyName)) throw new CliUsageError(`unsupported key: ${key}`);
+                return await withDevice(deps, flags, async (device) =>
+                    ok({ ok: true, result: await device.pressKey(key as KeyName) }));
+            }
+            case 'swipe': {
+                const from = pointFlag(flags, 'from');
+                const to = pointFlag(flags, 'to');
+                const speed = numberFlag(flags, 'speed');
+                return await withDevice(deps, flags, async (device) => {
+                    const before = await device.observe();
+                    assertExpectation(before, flags);
+                    const result = await device.swipe({ from, to, observationId: before.observationId, speed });
+                    return ok({ ok: true, result, observation: summarizeObservation(await device.observe()) });
+                });
+            }
+            case 'launch': {
+                const bundleName = positional(positionals, 'bundle');
+                return await withDevice(deps, flags, async (device) => {
+                    const before = await device.observe();
+                    assertExpectation(before, flags);
+                    return ok({ ok: true, result: await device.launchApp(bundleName) });
+                });
+            }
+            case 'stop': {
+                const bundleName = positional(positionals, 'bundle');
+                return await withDevice(deps, flags, async (device) => {
+                    const before = await device.observe();
+                    assertExpectation(before, flags);
+                    return ok({ ok: true, result: await device.stopApp(bundleName) });
+                });
+            }
             default:
                 return usage(command ? `unknown command: ${command}` : 'a command is required');
         }
     } catch (error) {
+        if (error instanceof CliUsageError) return usage(error.message);
         return fail(error);
     }
 }

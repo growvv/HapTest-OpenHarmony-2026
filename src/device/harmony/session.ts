@@ -62,45 +62,6 @@ export interface HarmonySessionDependencies {
     acquireLease?(serial: string): DeviceLease;
 }
 
-// `bm dump -a` is fast but returns bundle IDs rather than localized labels.
-// Keep a small, reviewed set of high-confidence names inferred from known IDs;
-// leave unfamiliar packages untouched instead of inventing an app name.
-const APP_DISPLAY_NAME_GUESSES: Readonly<Record<string, string>> = {
-    'cn.wps.mobileoffice.hap': 'WPS Office',
-    'com.alipay.mobile.client': '支付宝',
-    'com.baidu.baiduapp': '百度',
-    'com.jd.hm.mall': '京东',
-    'com.kuaishou.hmapp': '快手',
-    'com.sankuai.hmeituan': '美团',
-    'com.sina.weibo.stage': '微博',
-    'com.ss.hm.article.news': '今日头条',
-    'com.ss.hm.ugc.aweme': '抖音',
-    'com.taobao.idlefish4ohos': '闲鱼',
-    'com.taobao.taobao4hmos': '淘宝',
-    'com.xingin.xhs_hos': '小红书',
-    'com.xunmeng.pinduoduo.hos': '拼多多',
-    'com.huawei.hmos.settings': '设置',
-    'com.huawei.hmos.browser': '浏览器',
-    'com.huawei.hmos.calculator': '计算器',
-    'com.huawei.hmos.calendar': '日历',
-    'com.huawei.hmos.camera': '相机',
-    'com.huawei.hmos.clock': '时钟',
-    'com.ohos.contacts': '联系人',
-    'com.huawei.hmos.email': '邮件',
-    'com.huawei.hmos.filemanager': '文件管理',
-    'com.huawei.hmos.maps.app': '地图',
-    'com.huawei.hmos.notepad': '备忘录',
-    'com.huawei.hmos.photos': '图库',
-    'com.huawei.hmos.soundrecorder': '录音机',
-    'com.huawei.hmos.videoplayer': '视频',
-    'com.huawei.hmsapp.appgallery': '应用市场',
-    'com.huawei.hmsapp.gamecenter': '游戏中心',
-    'com.huawei.hmsapp.music': '音乐',
-    'com.huawei.hms.weather': '天气',
-    'com.huawei.hmos.vmall': '华为商城',
-    'com.huawei.hmos.myhuawei': '我的华为',
-};
-
 const defaults: HarmonySessionDependencies = {
     listTargets: () => Hdc.listTargets(),
     createDevice: (serial, output) => new Device({ connectkey: serial, output }),
@@ -379,7 +340,7 @@ export class HarmonyDevice {
         });
     }
 
-    typeText(text: string, options: { allowNewlines?: boolean; verify?: boolean } = {}): Promise<{ outcome: 'completed'; verified?: boolean }> {
+    typeText(text: string, options: { allowNewlines?: boolean } = {}): Promise<{ outcome: 'completed' }> {
         return this.serialize(async () => {
             this.ensureOpen();
             this.requireObservation();
@@ -400,72 +361,18 @@ export class HarmonyDevice {
             if (isSensitiveField(focused[0])) {
                 throw new HarmonyDeviceError('SENSITIVE_FIELD', 'Authentication fields must be completed directly on the device.');
             }
-            const expectedValue = `${focused[0].text ?? ''}${text}`;
             await this.mutate(() => this.device.getHdc().inputFocusedText(text));
-            if (options.verify) {
-                let actual: string | undefined;
-                try {
-                    const after = await this.device.dumpViewTree(false);
-                    const afterFocus = after.getComponents().filter((component) => component.focused && component.inputable);
-                    if (afterFocus.length === 1 && !isSensitiveField(afterFocus[0])) actual = afterFocus[0].text;
-                } catch {
-                    return { outcome: 'completed', verified: false };
-                }
-                if (actual !== expectedValue) {
-                    throw new HarmonyDeviceError('ACTION_VERIFICATION_FAILED', 'Text input was sent, but the ordinary field did not confirm the expected value. Do not resend before observing the device.', {
-                        serial: this.serial,
-                        outcome: 'executed_verification_failed',
-                        replayAction: false,
-                    });
-                }
-                return { outcome: 'completed', verified: true };
-            }
             return { outcome: 'completed' };
         });
     }
 
-    findApps(query = ''): Array<{
-        bundleName: string;
-        displayName?: string;
-        displayNameSource?: 'bundle_name_guess' | 'device_metadata';
-        versionName?: string;
-    }> {
+    findApps(query = ''): Array<{ bundleName: string }> {
         this.ensureOpen();
         const needle = query.trim().toLocaleLowerCase();
         try {
-            const bundleNames = this.device.getAllBundleNames();
-            // Listing all installed bundles is one HDC request. Looking up metadata
-            // for every bundle is a separate device round trip per app and can take
-            // several minutes on a phone with a large catalog.
-            if (!needle) return bundleNames.map((bundleName) => {
-                const displayName = APP_DISPLAY_NAME_GUESSES[bundleName];
-                return {
-                    bundleName,
-                    ...(displayName ? { displayName, displayNameSource: 'bundle_name_guess' as const } : {}),
-                };
-            });
-
-            // Match known label guesses without querying metadata for every
-            // installed app. Fetch metadata only for bundle-ID matches.
-            return bundleNames.filter((bundleName) =>
-                bundleName.toLocaleLowerCase().includes(needle) ||
-                APP_DISPLAY_NAME_GUESSES[bundleName]?.toLocaleLowerCase().includes(needle),
-            ).map((bundleName) => {
-                const matchedByBundleName = bundleName.toLocaleLowerCase().includes(needle);
-                const info = matchedByBundleName ? this.device.getBundleInfo(bundleName) : undefined;
-                const applicationInfo = info?.applicationInfo as { name?: unknown } | undefined;
-                const guessedDisplayName = APP_DISPLAY_NAME_GUESSES[bundleName];
-                const metadataDisplayName = typeof applicationInfo?.name === 'string' ? applicationInfo.name : undefined;
-                return {
-                    bundleName,
-                    ...(guessedDisplayName
-                        ? { displayName: guessedDisplayName, displayNameSource: 'bundle_name_guess' as const }
-                        : metadataDisplayName
-                            ? { displayName: metadataDisplayName, displayNameSource: 'device_metadata' as const }
-                            : {}),
-                    ...(typeof info?.versionName === 'string' ? { versionName: info.versionName } : {}),
-                };
-            });
+            return this.device.getAllBundleNames()
+                .filter((bundleName) => !needle || bundleName.toLocaleLowerCase().includes(needle))
+                .map((bundleName) => ({ bundleName }));
         } catch (error) {
             throw new HarmonyDeviceError('APP_QUERY_FAILED', `Could not query installed apps on ${this.serial}.`, { serial: this.serial }, error);
         }

@@ -180,45 +180,27 @@ describe('HarmonyDevice', () => {
         await session.close();
     });
 
-    it('lists bundle names in one pass, guesses known labels, and fetches metadata only for bundle-name matches', async () => {
+    it('returns bundle names only and never guesses a localized label', async () => {
         const fake = setup([online], false, undefined, false, {
-            bundleNames: ['com.huawei.hmos.settings', 'com.huawei.hmos.camera'],
+            bundleNames: ['com.huawei.hmos.settings', 'com.taobao.taobao4hmos'],
             info: {
                 'com.huawei.hmos.settings': {
-                    applicationInfo: { name: 'com.huawei.hmos.settings' },
+                    applicationInfo: { name: '设置' },
                     versionName: '1.0',
                 },
             },
         });
         const session = await connectSession({ serial: online.serial }, fake.dependencies);
 
-        // Known bundles carry a guessed label, and listing must not do a
-        // metadata round trip per installed app.
         expect(session.findApps()).toEqual([
-            { bundleName: 'com.huawei.hmos.settings', displayName: '设置', displayNameSource: 'bundle_name_guess' },
-            { bundleName: 'com.huawei.hmos.camera', displayName: '相机', displayNameSource: 'bundle_name_guess' },
+            { bundleName: 'com.huawei.hmos.settings' },
+            { bundleName: 'com.taobao.taobao4hmos' },
         ]);
-        expect(fake.getBundleInfo).not.toHaveBeenCalled();
-
-        // A bundle-name match reads device metadata for that bundle.
-        expect(session.findApps('settings')).toEqual([{
-            bundleName: 'com.huawei.hmos.settings',
-            displayName: '设置',
-            displayNameSource: 'bundle_name_guess',
-            versionName: '1.0',
-        }]);
-        expect(fake.getBundleInfo).toHaveBeenCalledTimes(1);
-        expect(fake.getBundleInfo).toHaveBeenCalledWith('com.huawei.hmos.settings');
-
-        // A label-guess match is resolved locally and needs no metadata call.
-        expect(session.findApps('相机')).toEqual([{
-            bundleName: 'com.huawei.hmos.camera',
-            displayName: '相机',
-            displayNameSource: 'bundle_name_guess',
-        }]);
-        expect(fake.getBundleInfo).toHaveBeenCalledTimes(1);
-
+        // A localized query cannot match anything we did not read from the device.
+        expect(session.findApps('淘宝')).toEqual([]);
+        expect(session.findApps('settings')).toEqual([{ bundleName: 'com.huawei.hmos.settings' }]);
         expect(session.findApps('nonexistent')).toEqual([]);
+        expect(fake.getBundleInfo).not.toHaveBeenCalled();
         await session.close();
     });
 
@@ -293,7 +275,7 @@ describe('HarmonyDevice', () => {
         const fake = setup([online], false, [ordinaryPage, ordinaryPage, typedPage]);
         const session = await connectSession({ serial: online.serial }, fake.dependencies);
         await session.observe();
-        await expect(session.typeText('hello', { verify: true })).resolves.toMatchObject({ outcome: 'completed', verified: true });
+        await expect(session.typeText('hello')).resolves.toEqual({ outcome: 'completed' });
         expect(fake.inputFocusedText).toHaveBeenCalledWith('hello');
         await session.close();
 

@@ -117,6 +117,14 @@ async function runScreenCommand(options: any): Promise<void> {
 }
 
 (async function (): Promise<void> {
+    if (process.argv[2] === 'harmony') {
+        const { runHarmonyCli } = await import('./harmony_command');
+        const result = await runHarmonyCli(process.argv.slice(3));
+        process.stdout.write(result.stdout);
+        process.stderr.write(result.stderr);
+        process.exit(result.exitCode);
+    }
+
     const packageCfg = parsePackageConfig();
 
     program.name(packageCfg.name).version(packageCfg.version);

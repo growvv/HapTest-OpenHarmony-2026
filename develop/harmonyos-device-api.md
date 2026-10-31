@@ -70,10 +70,10 @@ haptest harmony serve    [--serial <s>]
 | --- | --- |
 | 0 | 成功 |
 | 1 | 动作/查询失败（`SELECTOR_NOT_FOUND`、`AMBIGUOUS_TARGET`、`ACTION_OUTCOME_UNCERTAIN` 等） |
-| 2 | 用法错误（未知命令、缺参数、参数格式错） |
+| 2 | 用法错误（未知命令、未知 flag、多余参数、参数格式错、`--index` 越界） |
 | 3 | 前置条件不满足（`HDC_UNAVAILABLE`、`NO_DEVICE`、`MULTIPLE_DEVICES`、`DEVICE_OFFLINE`、`DEVICE_BUSY`、锁屏、`STALE_OBSERVATION`、`INPUT_FOCUS_REQUIRED`、`SENSITIVE_FIELD`） |
 
-失败时 stdout 为 `{ ok:false, errorCode, message, details?, nextStep? }`。
+失败时 stdout 为 `{ ok:false, errorCode, message, details?, nextStep? }`。`doctor` 发现环境问题时同样输出 `ok:false` + `errorCode:"DEVICE_NOT_READY"` + `issues`，退出 3。
 
 ## serve：有状态 JSON-lines 会话
 
@@ -88,7 +88,7 @@ haptest harmony serve    [--serial <s>]
 {"id":3,"ok":true,"result":{"closed":true}}
 ```
 
-方法：`observe`、`find`、`tap`、`swipe`、`type_text`、`press_key`、`apps`、`launch_app`、`stop_app`、`close`。非法 JSON → `BAD_REQUEST`；未知方法 → `UNKNOWN_METHOD`；两种情况都不会结束进程。
+方法：`observe`、`find`、`tap`、`swipe`、`type_text`、`press_key`、`apps`、`launch_app`、`stop_app`、`close`。`observe` 带 `{"screenshot":true}` 时，`result.screenshot.data` 是 base64 像素。非法 JSON → `BAD_REQUEST`；未知方法 → `UNKNOWN_METHOD`；关闭后再发请求 → `SESSION_CLOSED`；这三种情况都不会结束进程。
 
 ## E2E
 

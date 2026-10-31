@@ -258,7 +258,7 @@ export class HarmonyDevice {
                 }
                 const index = options.index ?? matches.indexOf(containedMatch!);
                 if (!Number.isInteger(index) || index < 0 || index >= matches.length) {
-                    throw new HarmonyDeviceError('ACTION_PRECONDITION_FAILED', 'The selector candidate index is out of range.', {
+                    throw new HarmonyDeviceError('SELECTOR_INDEX_OUT_OF_RANGE', 'The selector candidate index is out of range.', {
                         candidateCount: matches.length,
                     });
                 }

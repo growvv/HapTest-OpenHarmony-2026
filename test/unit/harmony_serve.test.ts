@@ -51,6 +51,37 @@ describe('harmony serve', () => {
         expect(device.calls).toEqual(['tap', 'close']);
     });
 
+    it('returns base64 pixels when the client asks for a screenshot', async () => {
+        const device = {
+            ...fakeDevice(),
+            observe: async () => ({
+                observationId: 'o1', observedAt: 't', serial: 'device-1', width: 100, height: 200,
+                coordinateSpace: 'physical-pixels', locked: false, bundleName: 'com.example.app',
+                screenshot: { mimeType: 'image/png', data: Buffer.from('pixels'), width: 100, height: 200, pixelToDeviceScale: 1 },
+            }),
+        };
+        const input = Readable.from(['{"id":1,"method":"observe","params":{"screenshot":true}}\n', '{"id":2,"method":"close","params":{}}\n']);
+        let out = '';
+        const output = new Writable({ write(chunk, _encoding, callback) { out += chunk.toString(); callback(); } });
+        await runHarmonyServe({ input, output }, { connect: async () => device as never });
+        const lines = out.trim().split('\n').map((line) => JSON.parse(line));
+        expect(lines[0].result.screenshot).toMatchObject({ mimeType: 'image/png', data: Buffer.from('pixels').toString('base64') });
+    });
+
+    it('keeps answering after a handler throws outside the device call', async () => {
+        const device = { ...fakeDevice(), close: async () => { throw new Error('disconnect failed'); } };
+        const input = Readable.from([
+            '{"id":1,"method":"close","params":{}}\n',
+            '{"id":2,"method":"observe","params":{}}\n',
+        ]);
+        let out = '';
+        const output = new Writable({ write(chunk, _encoding, callback) { out += chunk.toString(); callback(); } });
+        await runHarmonyServe({ input, output }, { connect: async () => device as never });
+        const lines = out.trim().split('\n').map((line) => JSON.parse(line));
+        expect(lines[0]).toMatchObject({ id: 1, ok: true });
+        expect(lines[1]).toMatchObject({ id: 2, ok: false, error: { code: 'SESSION_CLOSED' } });
+    });
+
     it('reports device errors without stopping the session', async () => {
         const device = { ...fakeDevice(), tap: async () => { throw new Error('boom'); } };
         const input = Readable.from([

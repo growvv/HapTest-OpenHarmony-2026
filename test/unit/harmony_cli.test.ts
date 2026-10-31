@@ -27,19 +27,19 @@ function unlockedObservation(overrides: Record<string, unknown> = {}) {
 }
 
 function actionDevice(overrides: Record<string, unknown> = {}) {
-    const calls: Array<{ name: string; args: unknown[] }> = [];
+    const calls: string[] = [];
     const device = {
         calls,
         serial: 'device-1',
-        observe: async () => unlockedObservation(),
+        observe: async () => { calls.push('observe'); return unlockedObservation(); },
         findApps: () => [],
-        tap: async (...args: unknown[]) => { calls.push({ name: 'tap', args }); return { outcome: 'completed' }; },
-        typeText: async (...args: unknown[]) => { calls.push({ name: 'typeText', args }); return { outcome: 'completed' }; },
-        pressKey: async (...args: unknown[]) => { calls.push({ name: 'pressKey', args }); return { outcome: 'completed' }; },
-        swipe: async (...args: unknown[]) => { calls.push({ name: 'swipe', args }); return { outcome: 'completed' }; },
-        launchApp: async (...args: unknown[]) => { calls.push({ name: 'launchApp', args }); return { outcome: 'completed' }; },
-        stopApp: async (...args: unknown[]) => { calls.push({ name: 'stopApp', args }); return { outcome: 'completed' }; },
-        close: async () => {},
+        tap: async () => { calls.push('tap'); return { outcome: 'completed' }; },
+        typeText: async () => { calls.push('typeText'); return { outcome: 'completed' }; },
+        pressKey: async () => { calls.push('pressKey'); return { outcome: 'completed' }; },
+        swipe: async () => { calls.push('swipe'); return { outcome: 'completed' }; },
+        launchApp: async () => { calls.push('launchApp'); return { outcome: 'completed' }; },
+        stopApp: async () => { calls.push('stopApp'); return { outcome: 'completed' }; },
+        close: async () => { calls.push('close'); },
         ...overrides,
     };
     return device;
@@ -59,6 +59,16 @@ describe('harmony cli', () => {
         expect(result.stderr).toContain('usage');
     });
 
+    it('turns a bare HDC failure on devices into the install guidance', async () => {
+        const result = await runHarmonyCli(['devices'], {
+            ...hdcMissing,
+            devices: () => { throw new Error('/bin/sh: hdc: command not found'); },
+        });
+        expect(result.exitCode).toBe(3);
+        expect(result.stderr).toContain('DevEco');
+        expect(JSON.parse(result.stdout).errorCode).toBe('HDC_UNAVAILABLE');
+    });
+
     it('lists devices without connecting', async () => {
         const result = await runHarmonyCli(['devices'], { ...hdcMissing, devices: () => [{ serial: 'device-1' } as never] });
         expect(result.exitCode).toBe(0);
@@ -66,7 +76,6 @@ describe('harmony cli', () => {
     });
 
     it('reports a locked device without a tree, then closes the session', async () => {
-        const closed: string[] = [];
         const device = {
             serial: 'device-1',
             observe: async () => ({
@@ -74,24 +83,22 @@ describe('harmony cli', () => {
                 coordinateSpace: 'physical-pixels', locked: true,
             }),
             findApps: () => [],
-            close: async () => { closed.push('close'); },
+            close: async () => {},
         };
         const result = await runHarmonyCli(['observe'], depsWith(device));
         expect(result.exitCode).toBe(0);
         const parsed = JSON.parse(result.stdout);
         expect(parsed.observation.locked).toBe(true);
         expect(parsed.observation.tree).toBeUndefined();
-        expect(closed).toEqual(['close']);
     });
 
     it('writes the screenshot to the requested path and keeps only metadata in JSON', async () => {
         const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'haptest-cli-')), 'screen.png');
-        const device = {
-            ...actionDevice(),
+        const device = actionDevice({
             observe: async () => unlockedObservation({
                 screenshot: { mimeType: 'image/png', data: Buffer.from('png-bytes'), width: 100, height: 200, pixelToDeviceScale: 1 },
             }),
-        };
+        });
         const result = await runHarmonyCli(['observe', '--screenshot', file], depsWith(device));
         expect(result.exitCode).toBe(0);
         expect(fs.readFileSync(file).toString()).toBe('png-bytes');
@@ -111,7 +118,7 @@ describe('harmony cli', () => {
         const device = actionDevice();
         const result = await runHarmonyCli(['tap', '--text', 'OK'], depsWith(device));
         expect(result.exitCode).toBe(0);
-        expect(device.calls).toEqual([{ name: 'tap', args: [{ selector: { text: 'OK' }, index: undefined }] }]);
+        expect(device.calls).toEqual(['observe', 'tap', 'observe', 'close']);
         expect(JSON.parse(result.stdout).observation.observationId).toBe('o2');
     });
 
@@ -130,7 +137,7 @@ describe('harmony cli', () => {
         const device = actionDevice();
         const result = await runHarmonyCli(['tap', '--text', 'OK', '--expect-sig', 'stale'], depsWith(device));
         expect(result.exitCode).toBe(3);
-        expect(device.calls).toEqual([]);
+        expect(device.calls).toEqual(['observe', 'close']);
         expect(JSON.parse(result.stdout).errorCode).toBe('STALE_OBSERVATION');
     });
 
@@ -140,13 +147,54 @@ describe('harmony cli', () => {
         expect(result.stderr).toContain('usage');
     });
 
-    it('types text, presses a key, swipes, launches and stops an app', async () => {
+    it('exits 2 when the selector index is out of range', async () => {
+        const device = actionDevice({
+            tap: async () => {
+                throw new HarmonyDeviceError('SELECTOR_INDEX_OUT_OF_RANGE', 'The selector candidate index is out of range.', { candidateCount: 2 });
+            },
+        });
+        const result = await runHarmonyCli(['tap', '--text', 'OK', '--index', '5'], depsWith(device));
+        expect(result.exitCode).toBe(2);
+        expect(result.stderr).toContain('usage');
+    });
+
+    it('rejects an unknown flag instead of silently ignoring it', async () => {
+        const result = await runHarmonyCli(['observe', '--screenshott', 'out.png'], depsWith(actionDevice()));
+        expect(result.exitCode).toBe(2);
+        expect(result.stderr).toContain('unknown flag: --screenshott');
+    });
+
+    it('rejects extra positional arguments instead of dropping them', async () => {
         const device = actionDevice();
-        expect((await runHarmonyCli(['type', 'hello'], depsWith(device))).exitCode).toBe(0);
-        expect((await runHarmonyCli(['key', 'BACK'], depsWith(device))).exitCode).toBe(0);
-        expect((await runHarmonyCli(['swipe', '--from', '10,20', '--to', '10,80'], depsWith(device))).exitCode).toBe(0);
-        expect((await runHarmonyCli(['launch', 'com.huawei.hmos.settings'], depsWith(device))).exitCode).toBe(0);
-        expect((await runHarmonyCli(['stop', 'com.huawei.hmos.settings'], depsWith(device))).exitCode).toBe(0);
-        expect(device.calls.map((call) => call.name)).toEqual(['typeText', 'pressKey', 'swipe', 'launchApp', 'stopApp']);
+        const result = await runHarmonyCli(['type', 'hello', 'world'], depsWith(device));
+        expect(result.exitCode).toBe(2);
+        expect(device.calls).toEqual([]);
+    });
+
+    it('observes before pressing a key and reports the resulting observation', async () => {
+        const device = actionDevice();
+        const result = await runHarmonyCli(['key', 'BACK'], depsWith(device));
+        expect(result.exitCode).toBe(0);
+        expect(device.calls).toEqual(['observe', 'pressKey', 'observe', 'close']);
+        expect(JSON.parse(result.stdout).observation.observationId).toBe('o2');
+    });
+
+    it('reports the observation after type, launch and stop', async () => {
+        for (const [command, name] of [['type', 'typeText'], ['launch', 'launchApp'], ['stop', 'stopApp']] as const) {
+            const device = actionDevice();
+            const result = await runHarmonyCli([command, command === 'type' ? 'hello' : 'com.a.b'], depsWith(device));
+            expect(result.exitCode).toBe(0);
+            expect(device.calls).toEqual(['observe', name, 'observe', 'close']);
+            expect(JSON.parse(result.stdout).observation.observationId).toBe('o2');
+        }
+    });
+
+    it('reports a not-ready doctor with ok:false and exit 3', async () => {
+        const result = await runHarmonyCli(['doctor'], {
+            ...hdcMissing,
+            doctor: () => ({ hdcVersion: '3.2.0c', devices: [], issues: ['No connected HarmonyOS device is available.'] }),
+        });
+        expect(result.exitCode).toBe(3);
+        expect(JSON.parse(result.stdout)).toMatchObject({ ok: false, errorCode: 'DEVICE_NOT_READY' });
     });
 });

@@ -122,7 +122,9 @@ async function runScreenCommand(options: any): Promise<void> {
         const result = await runHarmonyCli(process.argv.slice(3));
         process.stdout.write(result.stdout);
         process.stderr.write(result.stderr);
-        process.exit(result.exitCode);
+        // Let the event loop flush piped stdout; process.exit() truncates large payloads.
+        process.exitCode = result.exitCode;
+        return;
     }
 
     const packageCfg = parsePackageConfig();

@@ -39,6 +39,13 @@ export class Hdc {
         this.connectkey = connectkey;
     }
 
+    static getVersion(): string {
+        const result = spawnSync('hdc', ['version'], { encoding: 'utf-8', shell: false });
+        if (result.error) throw new Error(`Failed to execute hdc: ${result.error.message}`);
+        if (result.status !== 0) throw new Error((result.stderr || result.stdout || 'hdc version failed').trim());
+        return (result.stdout || '').trim();
+    }
+
     private ensureMemdumper(): void {
         if (!this.hasFile(MEMDUMPER)) {
             let memdumpFile = path.join(__dirname, '..', '..', 'res/memdumper/memdumper');
@@ -160,6 +167,21 @@ export class Hdc {
         this.recvFile(remote, localFile);
         this.excuteShellCommandSync(...['rm', remote]);
         return localFile;
+    }
+
+    inputFocusedText(text: string): void {
+        const args = this.connectkey ? ['-t', this.connectkey] : [];
+        const result = spawnSync('hdc', [...args, 'shell', 'uitest', 'uiInput', 'text', text], {
+            encoding: 'utf-8',
+            shell: false,
+            timeout: 30000,
+        });
+        if (result.error) throw new HdcCmdError(`Focused text input failed: ${result.error.message}`);
+        if (result.status !== 0) {
+            throw new HdcCmdError(`Focused text input failed: ${(result.stderr || result.stdout || 'hdc exited unsuccessfully').trim()}`);
+        }
+        const output = (result.stdout || '').trim();
+        if (/^\[Fail\]/i.test(output)) throw new HdcCmdError(`Focused text input failed: ${output}`);
     }
 
     wakeupScreen(): void {

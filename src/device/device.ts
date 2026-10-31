@@ -38,6 +38,8 @@ import { ArkUiDriver } from './uidriver/arkui_driver';
 import { buildDriverImpl, DriverContext } from './uidriver/build';
 import { Gesture } from '../event/gesture';
 import { PageBuilder } from '../model/builder/page_builder';
+import { ScreenCaptureStream } from './uidriver/screen_capture_stream';
+import type { ScreenCaptureFrame } from './uidriver/screen_capture_stream';
 const logger = getLogger();
 
 export interface DeviceOptions {
@@ -60,6 +62,8 @@ export class Device implements EventSimulator {
     private lastFaultlogs: Set<string>;
     private faultLogBaselineInitialized = false;
     private driverCtx?: DriverContext;
+    private screenCaptureStream?: ScreenCaptureStream;
+    private screenCaptureStarting = false;
 
     constructor(options: DeviceOptions) {
         this.options = options;
@@ -103,6 +107,35 @@ export class Device implements EventSimulator {
 
     getDriver(): ArkUiDriver {
         return this.driverCtx!.driver;
+    }
+
+    async startScreenCapture(
+        onFrame: (frame: ScreenCaptureFrame) => void,
+        onError?: (error: Error) => void,
+    ): Promise<{ stop(): Promise<void> }> {
+        if (!this.driverCtx) throw new Error('Device is not connected.');
+        if (this.screenCaptureStream || this.screenCaptureStarting) throw new Error('A screen capture stream is already active or starting.');
+        this.screenCaptureStarting = true;
+        try {
+            let stream: ScreenCaptureStream | undefined;
+            stream = await ScreenCaptureStream.start(this.driverCtx.agent.getRpc(), onFrame, (error) => {
+                if (this.screenCaptureStream === stream) this.screenCaptureStream = undefined;
+                onError?.(error);
+            });
+            this.screenCaptureStream = stream;
+            return {
+                stop: async () => {
+                    if (!stream || this.screenCaptureStream !== stream) return;
+                    try {
+                        await stream.stop();
+                    } finally {
+                        if (this.screenCaptureStream === stream) this.screenCaptureStream = undefined;
+                    }
+                },
+            };
+        } finally {
+            this.screenCaptureStarting = false;
+        }
     }
 
     async disconnect(): Promise<void> {
@@ -173,6 +206,11 @@ export class Device implements EventSimulator {
         return this.displaySize!.y;
     }
 
+    async getLiveDisplaySize(): Promise<Point> {
+        if (!this.driverCtx) throw new Error('Device is not connected.');
+        return this.driverCtx.driver.getDisplaySize();
+    }
+
     /**
      * Get all bundles install in the device
      * @returns
@@ -222,7 +260,7 @@ export class Device implements EventSimulator {
      * Dump UI component view tree
      * @returns
      */
-    async dumpViewTree(): Promise<Page> {
+    async dumpViewTree(dismissKeyboard: boolean = true): Promise<Page> {
         let retryCnt = 5;
         let attempt = 0;
         while (retryCnt-- >= 0) {
@@ -233,7 +271,7 @@ export class Device implements EventSimulator {
                 `dumpViewTree attempt=${attempt} layoutType=${layout ? typeof layout : 'undefined'} pages=${pages.length}`
             );
             // if exist keyboard then close and dump again.
-            if (await this.closeKeyboard(pages)) {
+            if (dismissKeyboard && await this.closeKeyboard(pages)) {
                 logger.info('Keyboard detected during dumpViewTree, sending hide event and retrying.');
                 // for sleep
                 this.hdc.getDeviceUdid();
@@ -468,6 +506,16 @@ export class Device implements EventSimulator {
         const ctx = this.driverCtx;
         this.driverCtx = undefined;
         this.displaySize = undefined;
+
+        const screenCaptureStream = this.screenCaptureStream;
+        this.screenCaptureStream = undefined;
+        if (screenCaptureStream) {
+            try {
+                await screenCaptureStream.stop();
+            } catch {
+                // Continue tearing down the agent after a failed stream stop.
+            }
+        }
 
         try {
             await ctx.driver.free();

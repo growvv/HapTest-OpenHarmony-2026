@@ -30,6 +30,19 @@ const UNIX_SOCKET_NAME = 'uitest_socket';
 const DEVICE_AGENT_FILE = '/data/local/tmp/agent.so';
 const logger = getLogger();
 
+export interface UitestAgentDiagnostic {
+    uitestVersion: string;
+    architecture: string;
+    selectedAgent: { version: string; architecture: string; transport: AgentTransport; endpoint: string };
+    installedAgent: { version?: string; fileInfo: string; compatible: boolean; replacementReasons: string[] };
+    daemon: {
+        expectedEndpoint: string;
+        expectedEndpointRunning: boolean;
+        alternateEndpoint: string;
+        alternateEndpointRunning: boolean;
+    };
+}
+
 export class UitestAgent {
     private hdc: Hdc;
     private deviceEndpoint: string;
@@ -39,6 +52,40 @@ export class UitestAgent {
     constructor(hdc: Hdc) {
         this.hdc = hdc;
         this.deviceEndpoint = `tcp:${RPC_PORT}`;
+    }
+
+    static diagnose(hdc: Hdc): UitestAgentDiagnostic {
+        const agent = new UitestAgent(hdc);
+        const uitestVersion = hdc.excuteShellCommandSync('/system/bin/uitest --version').trim();
+        const uitestFileInfo = hdc.excuteShellCommandSync('file /system/bin/uitest').trim();
+        const architecture = detectAgentArchitecture(uitestFileInfo);
+        const profile = selectAgentProfile(uitestVersion, architecture);
+        const alternateTransport: AgentTransport = profile.transport === 'unix' ? 'tcp' : 'unix';
+        const installed = agent.readAgent(profile);
+        const endpoint = agent.getDeviceEndpoint(profile.transport);
+        const alternateEndpoint = agent.getDeviceEndpoint(alternateTransport);
+        return {
+            uitestVersion,
+            architecture,
+            selectedAgent: {
+                version: profile.version,
+                architecture: profile.architecture,
+                transport: profile.transport,
+                endpoint,
+            },
+            installedAgent: {
+                version: installed.version,
+                fileInfo: installed.fileInfo,
+                compatible: installed.reasons.length === 0,
+                replacementReasons: installed.reasons,
+            },
+            daemon: {
+                expectedEndpoint: endpoint,
+                expectedEndpointRunning: agent.isRunning(profile.transport),
+                alternateEndpoint,
+                alternateEndpointRunning: agent.isRunning(alternateTransport),
+            },
+        };
     }
 
     getRpc(): HypiumRpc {

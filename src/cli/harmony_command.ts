@@ -141,7 +141,7 @@ async function withDevice<T>(deps: HarmonyCliDeps, flags: Flags, run: (device: H
     }
 }
 
-function summarizeObservation(observation: HarmonyObservation, screenshotPath?: string) {
+export function summarizeObservation(observation: HarmonyObservation, screenshotPath?: string) {
     return {
         observationId: observation.observationId,
         observedAt: observation.observedAt,
@@ -302,6 +302,11 @@ export async function runHarmonyCli(argv: string[], deps: HarmonyCliDeps = defau
                     assertExpectation(before, flags);
                     return ok({ ok: true, result: await device.stopApp(bundleName) });
                 });
+            }
+            case 'serve': {
+                const { runHarmonyServe } = await import('./harmony_serve');
+                await runHarmonyServe({ serial: serialFlag(flags) });
+                return { exitCode: 0, stdout: '', stderr: '' };
             }
             default:
                 return usage(command ? `unknown command: ${command}` : 'a command is required');

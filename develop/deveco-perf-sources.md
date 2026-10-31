@@ -1,5 +1,6 @@
 # DevEco Studio 的性能数据是怎么采的（逆向笔记）
 
+> **接口/参数手册见 [`deveco-perf-api.md`](deveco-perf-api.md)**；本文只记逆向过程、证据与结论。
 > 日期：2026-11-01 · 对象：`/Applications/DevEco-Studio.app` 26.0.0.865
 > 目的：给 HapTest 的掉帧/性能测量找一条**已被大厂验证过**的数据通路，而不是自己猜命令。
 

@@ -1,5 +1,7 @@
 # HarmonyOS 复刻：现状审计与重写决策（复核版）
 
+> **历史文档。** 本文是 2026-11-01 重写前的审计与路线评估，保留作为证据链。最终采纳的路线是「内部 API + CLI」（本文第 7 节的路线 C），MCP / 插件 / widget 已从代码中删除。当前能力与用法见 [`harmonyos-device-api.md`](harmonyos-device-api.md)。
+
 > 日期：2026-11-01（复核上一版同日审计，所有结论以本次实测为准）
 > 审计对象：`feat/harmonyos-replica-consolidated`（HEAD `ab70a19`），基线 `origin/main` = `45c85df`
 > 方法：读源码 + 实跑构建/测试/协议握手/安装链路；分支内文档一律当"待核实声明"

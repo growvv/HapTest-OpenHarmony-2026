@@ -53,7 +53,15 @@ function setup(
     const startAbility = vi.fn(() => true);
     const getBundleInfo = vi.fn((bundleName: string) => apps.info?.[bundleName]);
     const temporaryDirs: string[] = [];
+    const heldLeases = new Set<string>();
     const dependencies: HarmonySessionDependencies = {
+        acquireLease: (serial) => {
+            if (heldLeases.has(serial)) {
+                throw new HarmonyDeviceError('DEVICE_BUSY', `HarmonyOS device ${serial} already has an active HapTest owner.`, { serial });
+            }
+            heldLeases.add(serial);
+            return { release: () => { heldLeases.delete(serial); } };
+        },
         listTargets: () => targets,
         createDevice: (_serial, output) => ({
             connect,
@@ -229,7 +237,7 @@ describe('HarmonyDevice', () => {
     it('rejects a second owner and releases the serial after a failed connection', async () => {
         const first = setup();
         const session = await connectSession({ serial: online.serial }, first.dependencies);
-        await expect(HarmonyDevice.connect({ serial: online.serial }, setup().dependencies))
+        await expect(HarmonyDevice.connect({ serial: online.serial }, first.dependencies))
             .rejects.toMatchObject({ code: 'DEVICE_BUSY' });
         await session.close();
 

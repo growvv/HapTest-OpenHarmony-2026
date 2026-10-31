@@ -62,8 +62,6 @@ export interface HarmonySessionDependencies {
     acquireLease?(serial: string): DeviceLease;
 }
 
-const activeSerials = new Set<string>();
-
 // `bm dump -a` is fast but returns bundle IDs rather than localized labels.
 // Keep a small, reviewed set of high-confidence names inferred from known IDs;
 // leave unfamiliar packages untouched instead of inventing an app name.
@@ -187,11 +185,6 @@ export class HarmonyDevice {
                 state: selected?.state ?? 'not-found',
             });
         }
-        if (activeSerials.has(serial)) {
-            throw new HarmonyDeviceError('DEVICE_BUSY', `HarmonyOS device ${serial} already has an active HapTest session.`, { serial });
-        }
-
-        activeSerials.add(serial);
         let lease: DeviceLease | undefined;
         let tempDir: string | undefined;
         let device: SessionDevice | undefined;
@@ -202,7 +195,6 @@ export class HarmonyDevice {
             await device.connect();
             return new HarmonyDevice(serial, device, tempDir, dependencies, lease ?? { release: () => {} });
         } catch (error) {
-            activeSerials.delete(serial);
             lease?.release();
             if (device) {
                 try {
@@ -526,7 +518,6 @@ export class HarmonyDevice {
             await this.actionTail;
             await this.device.disconnect();
         } finally {
-            activeSerials.delete(this.serial);
             try {
                 this.lease.release();
             } finally {

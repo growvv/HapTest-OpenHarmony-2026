@@ -9,3 +9,5 @@ package-lock.json
 out/
 out[0-9]*/
 haps/
+# Local git worktrees (never commit their contents)
+.worktrees/

@@ -1,7 +1,7 @@
 # HarmonyOS 掉帧测量：设计（v2，基于 DevEco 逆向）
 
 > 日期：2026-11-01 · 基线 `feat/harmonyos-device-api`
-> 证据：`develop/deveco-perf-sources.md`（DevEco 26.0.0.865 逆向结论）
+> 证据：`develop/deveco-perf-sources.md`（DevEco 逆向结论）、`develop/deveco-perf-api.md`（接口/参数手册）
 > 目标问题：列表/Feed 场景滑动时的帧率与掉帧
 
 ## 1. 意图与理由

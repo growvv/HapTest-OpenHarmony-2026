@@ -10,7 +10,6 @@ import { KeyCode } from '../../model/key_code';
 import { HarmonyDeviceError } from './errors';
 import { DeviceLease, acquireDeviceLease } from './lease';
 import { findHarmonyComponents, HarmonyCandidate, HarmonySelector, summarizeHarmonyCandidates } from './selectors';
-import type { ScreenCaptureFrame } from '../uidriver/screen_capture_stream';
 
 export type HarmonyDeviceStatus = HdcTargetInfo;
 
@@ -52,7 +51,6 @@ interface SessionDevice {
     getHapInTarget(bundleName: string): Hap | undefined;
     startAblity(bundleName: string, abilityName: string): boolean;
     forceStop(bundleName: string): void;
-    startScreenCapture(onFrame: (frame: ScreenCaptureFrame) => void, onError?: (error: Error) => void): Promise<{ stop(): Promise<void> }>;
 }
 
 export interface HarmonySessionDependencies {
@@ -151,8 +149,6 @@ export class HarmonyDeviceSession {
     private actionTail: Promise<void> = Promise.resolve();
     private latestObservation?: HarmonyObservation;
     private latestTree?: Page;
-    private previewStop?: () => Promise<void>;
-    private previewFrame?: ScreenCaptureFrame;
 
     private constructor(
         readonly serial: string,
@@ -289,70 +285,6 @@ export class HarmonyDeviceSession {
         this.ensureOpen();
         this.requireObservation();
         return summarizeHarmonyCandidates(findHarmonyComponents(this.latestTree!, selector));
-    }
-
-    startPreview(): Promise<{ running: boolean }> {
-        return this.serialize(async () => {
-            this.ensureOpen();
-            if (this.previewStop) return { running: true };
-            const page = await this.device.dumpViewTree(false);
-            this.assertUnlocked(page);
-            try {
-                let streamFailed = false;
-                const capture = await this.device.startScreenCapture((frame) => {
-                    if (!this.closed && this.previewStop) this.previewFrame = frame;
-                }, () => {
-                    streamFailed = true;
-                    this.previewFrame = undefined;
-                    this.previewStop = undefined;
-                });
-                if (streamFailed) {
-                    await capture.stop().catch(() => {});
-                    throw new Error('Native screen stream stopped during startup.');
-                }
-                this.previewStop = capture.stop;
-                return { running: true };
-            } catch (error) {
-                this.previewFrame = undefined;
-                throw new HarmonyDeviceError('OBSERVE_FAILED', 'Could not start the native screen preview.', { serial: this.serial }, error);
-            }
-        });
-    }
-
-    pausePreview(): Promise<{ running: boolean }> {
-        return this.serialize(async () => {
-            this.ensureOpen();
-            await this.stopPreviewInternal();
-            return { running: false };
-        });
-    }
-
-    getPreviewFrame(): Promise<ScreenCaptureFrame | undefined> {
-        return this.serialize(async () => {
-            this.ensureOpen();
-            if (!this.previewStop) return undefined;
-            let page: Page;
-            try {
-                page = await this.device.dumpViewTree(false);
-            } catch (error) {
-                await this.stopPreviewInternal().catch(() => {});
-                throw new HarmonyDeviceError('OBSERVE_FAILED', 'Could not verify the screen lock state; the preview was stopped.', { serial: this.serial }, error);
-            }
-            if (isLockScreen(page)) {
-                await this.stopPreviewInternal().catch(() => {});
-                throw new HarmonyDeviceError('ACTION_PRECONDITION_FAILED', 'The device is locked; the screen preview was stopped. Unlock it directly on the device before resuming.');
-            }
-            return this.previewFrame;
-        });
-    }
-
-    private async stopPreviewInternal(): Promise<void> {
-        const stop = this.previewStop;
-        this.previewFrame = undefined;
-        if (stop) {
-            await stop();
-            if (this.previewStop === stop) this.previewStop = undefined;
-        }
     }
 
     tap(options: { selector?: HarmonySelector; index?: number; x?: number; y?: number; observationId?: string }): Promise<{ outcome: 'completed'; target?: HarmonyCandidate }> {
@@ -592,7 +524,6 @@ export class HarmonyDeviceSession {
         this.closed = true;
         try {
             await this.actionTail;
-            await this.stopPreviewInternal().catch(() => {});
             await this.device.disconnect();
         } finally {
             activeSerials.delete(this.serial);

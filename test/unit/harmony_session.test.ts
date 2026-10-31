@@ -47,12 +47,10 @@ function setup(
     });
     const click = vi.fn(async () => { if (clickFails) throw new Error('RPC timed out'); });
     const inputFocusedText = vi.fn(() => {});
-    const stopCapture = vi.fn(async () => {});
     const settingsApp = new Hap();
     settingsApp.bundleName = 'com.huawei.hmos.settings';
     settingsApp.mainAbility = 'Settings';
     const startAbility = vi.fn(() => true);
-    let onFrame: ((frame: { mimeType: 'image/jpeg'; data: Buffer; width: number; height: number }) => void) | undefined;
     const getBundleInfo = vi.fn((bundleName: string) => apps.info?.[bundleName]);
     const temporaryDirs: string[] = [];
     const dependencies: HarmonySessionDependencies = {
@@ -75,10 +73,6 @@ function setup(
             getHapInTarget: (bundleName: string) => bundleName === settingsApp.bundleName ? settingsApp : undefined,
             startAblity: startAbility,
             forceStop: () => {},
-            startScreenCapture: async (frameCallback) => {
-                onFrame = frameCallback;
-                return { stop: stopCapture };
-            },
             getHdc: () => ({
                 inputFocusedText,
                 capScreen: (folder: string) => {
@@ -96,7 +90,7 @@ function setup(
         now: () => new Date('2026-10-17T00:00:00.000Z'),
         makeObservationId: () => 'observation-1',
     };
-    return { dependencies, connect, disconnect, dumpViewTree, click, inputFocusedText, getBundleInfo, startAbility, stopCapture, emitFrame: (data: Buffer) => onFrame?.({ mimeType: 'image/jpeg', data, width: 100, height: 200 }), temporaryDirs };
+    return { dependencies, connect, disconnect, dumpViewTree, click, inputFocusedText, getBundleInfo, startAbility, temporaryDirs };
 }
 
 // Sessions claim a module-level serial, so one that is not closed leaks the
@@ -164,7 +158,6 @@ describe('HarmonyDeviceSession', () => {
         expect(observation.locked).toBe(true);
         expect(observation.tree).toBeUndefined();
         expect(observation.screenshot).toBeUndefined();
-        await expect(session.startPreview()).rejects.toMatchObject({ code: 'ACTION_PRECONDITION_FAILED' });
         await session.close();
     });
 
@@ -230,34 +223,6 @@ describe('HarmonyDeviceSession', () => {
         expect(observation.locked).toBe(true);
         expect(observation.tree).toBeUndefined();
         expect(observation.screenshot).toBeUndefined();
-        await session.close();
-    });
-
-    it('starts a preview on the current session and clears its frame when paused', async () => {
-        const fake = setup();
-        const session = await connectSession({ serial: online.serial }, fake.dependencies);
-        await expect(session.startPreview()).resolves.toEqual({ running: true });
-        fake.emitFrame(Buffer.from('jpeg-frame'));
-        await expect(session.getPreviewFrame()).resolves.toMatchObject({
-            mimeType: 'image/jpeg', data: Buffer.from('jpeg-frame'), width: 100, height: 200,
-        });
-        await expect(session.pausePreview()).resolves.toEqual({ running: false });
-        expect(fake.stopCapture).toHaveBeenCalledOnce();
-        await expect(session.getPreviewFrame()).resolves.toBeUndefined();
-        await expect(session.startPreview()).resolves.toEqual({ running: true });
-        await session.close();
-        expect(fake.stopCapture).toHaveBeenCalledTimes(2);
-        expect(fake.disconnect).toHaveBeenCalledOnce();
-    });
-
-    it('stops and discards preview frames when the device becomes locked', async () => {
-        const fake = setup([online], false, [makePage(), makePage(true)]);
-        const session = await connectSession({ serial: online.serial }, fake.dependencies);
-        await session.startPreview();
-        fake.emitFrame(Buffer.from('sensitive-frame'));
-        await expect(session.getPreviewFrame()).rejects.toMatchObject({ code: 'ACTION_PRECONDITION_FAILED' });
-        expect(fake.stopCapture).toHaveBeenCalledOnce();
-        await expect(session.getPreviewFrame()).resolves.toBeUndefined();
         await session.close();
     });
 

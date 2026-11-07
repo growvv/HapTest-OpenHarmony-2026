@@ -1,0 +1,105 @@
+{
+  "schemaVersion": 1,
+  "refreshRate": 60,
+  "budgetMs": 16.666666666666668,
+  "filters": {
+    "refreshRate": 60,
+    "processId": 10,
+    "typeDesc": "app",
+    "jankFlags": [
+      7
+    ]
+  },
+  "status": "ok",
+  "frameCount": 6,
+  "invalidFrameCount": 1,
+  "overBudgetCount": 2,
+  "overBudgetRatio": 0.3333333333333333,
+  "meanDurationMs": 17.5,
+  "p50DurationMs": 12,
+  "p95DurationMs": 34,
+  "maxDurationMs": 34,
+  "systemJankCount": 2,
+  "observedFlags": [
+    0,
+    7
+  ],
+  "observedTypes": [
+    "app"
+  ],
+  "interpretation": "overBudget compares slice duration with 1000/refreshRate. It is not an FPS measurement or a universal system-jank classification. Filter by process and frame type to avoid mixing app and RenderService slices. System flags require a version-specific explicit mapping.",
+  "frames": [
+    {
+      "id": 1,
+      "ts": 1000000000,
+      "dur": 10000000,
+      "ipid": 10,
+      "type_desc": "app",
+      "flag": 0,
+      "frame_no": 1,
+      "durationMs": 10,
+      "overBudget": false,
+      "systemJank": false
+    },
+    {
+      "id": 2,
+      "ts": 1020000000,
+      "dur": 16000000,
+      "ipid": 10,
+      "type_desc": "app",
+      "flag": 0,
+      "frame_no": 2,
+      "durationMs": 16,
+      "overBudget": false,
+      "systemJank": false
+    },
+    {
+      "id": 3,
+      "ts": 1040000000,
+      "dur": 25000000,
+      "ipid": 10,
+      "type_desc": "app",
+      "flag": 7,
+      "frame_no": 3,
+      "durationMs": 25,
+      "overBudget": true,
+      "systemJank": true
+    },
+    {
+      "id": 4,
+      "ts": 1060000000,
+      "dur": 8000000,
+      "ipid": 10,
+      "type_desc": "app",
+      "flag": 0,
+      "frame_no": 4,
+      "durationMs": 8,
+      "overBudget": false,
+      "systemJank": false
+    },
+    {
+      "id": 5,
+      "ts": 1080000000,
+      "dur": 34000000,
+      "ipid": 10,
+      "type_desc": "app",
+      "flag": 7,
+      "frame_no": 5,
+      "durationMs": 34,
+      "overBudget": true,
+      "systemJank": true
+    },
+    {
+      "id": 6,
+      "ts": 1100000000,
+      "dur": 12000000,
+      "ipid": 10,
+      "type_desc": "app",
+      "flag": 0,
+      "frame_no": 6,
+      "durationMs": 12,
+      "overBudget": false,
+      "systemJank": false
+    }
+  ]
+}

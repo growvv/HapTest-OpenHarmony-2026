@@ -1,0 +1,1 @@
+digraph G {graph[rankdir=LR,bgcolor="white",pad=.15,ranksep=.3];node[shape=box,fontname="Microsoft YaHei",fontsize=12,style="rounded,filled",fillcolor="#EAF7FD",color="#08A8F6"];edge[color="#708395"];a[label="hitrace\n交互区间采集"];b[label=".htrace\n保留原始证据"];c[label="trace_streamer\nSQLite 转换"];d[label="frame_slice\n进程 / 类型筛选"];e[label="耗时 / P95 / 预算\n系统标记显式映射"];a->b->c->d->e;}

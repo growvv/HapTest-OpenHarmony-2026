@@ -34,7 +34,7 @@ HarmonyOS 设备 API 与 CLI 的用法见 `develop/harmonyos-device-api.md`。
 ## 环境陷阱
 
 - `NODE_ENV=production` 下 `npm install` 会剪掉 devDependencies，`tsc` 消失。用 `NODE_ENV=development npm install --include=dev`。
-- 本机 `typescript` 7.0.2 是 ts-node 的 peer 自动装的，与 ts-node 10.9.2 不兼容 → `npm run haptest` / `npm run dump` 会失败。E2E 因此直接 `require('lib/')` 跑 node，不走 ts-node。
+- `typescript` 已显式列入开发依赖（5.9.x），避免 ts-node peer 自动安装不兼容的 TypeScript 7。E2E 直接 `require('lib/')` 跑 node，不走 ts-node。
 - `hdc` 不在 `PATH` 时，所有入口必须打印"装 DevEco CLI Tools + 加 PATH"的指引并退出 3，不能抛裸 `Error`。
 
 ## 提交前

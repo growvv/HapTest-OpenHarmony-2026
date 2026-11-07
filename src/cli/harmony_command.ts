@@ -37,6 +37,8 @@ const USAGE = [
     '  launch    launch an installed bundle',
     '  stop      force-stop an installed bundle',
     '  serve     stay connected and answer JSON-lines requests',
+    '  plan      plan a task from screenshot and tree (--task, optional --execute)',
+    '  trace     capture system trace for --seconds and optionally parse frames',
 ].join('\n');
 
 const HDC_HELP = [
@@ -82,10 +84,12 @@ const ALLOWED_FLAGS: Readonly<Record<string, readonly string[]>> = {
     tap: ['serial', 'id', 'text', 'text-contains', 'hint', 'name', 'index', 'x', 'y', 'expect-bundle', 'expect-sig'],
     type: ['serial', 'allow-newlines', 'expect-bundle', 'expect-sig'],
     key: ['serial', 'expect-bundle', 'expect-sig'],
-    swipe: ['serial', 'from', 'to', 'speed', 'expect-bundle', 'expect-sig'],
+    swipe: ['serial', 'from', 'to', 'speed', 'expect-bundle', 'expect-sig', 'measure', 'output', 'trace-streamer', 'refresh-rate'],
     launch: ['serial', 'expect-bundle', 'expect-sig'],
     stop: ['serial', 'expect-bundle', 'expect-sig'],
     serve: ['serial'],
+    plan: ['serial', 'task', 'model', 'max-steps', 'execute', 'output'],
+    trace: ['serial', 'seconds', 'output', 'trace-streamer', 'refresh-rate'],
 };
 
 const POSITIONAL_ARITY: Readonly<Record<string, number>> = { type: 1, key: 1, launch: 1, stop: 1 };
@@ -333,7 +337,44 @@ export async function runHarmonyCli(argv: string[], deps: HarmonyCliDeps = defau
                 return await withDevice(deps, flags, async (device) => {
                     const before = await device.observe();
                     assertExpectation(before, flags);
-                    return actedResult(device, await device.swipe({ from, to, observationId: before.observationId, speed }));
+                    const action = () => device.swipe({ from, to, observationId: before.observationId, speed });
+                    if (flags.measure !== undefined && flags.measure !== true) throw new CliUsageError('--measure does not take a value');
+                    if (flags.measure) {
+                        const { captureTrace } = await import('../device/perf/trace_capture');
+                        return actedResult(device, await captureTrace(device.serial, stringFlag(flags, 'output') ?? 'out/perf', async () => {
+                            const result = await action();
+                            await new Promise(resolve => setTimeout(resolve, 1000));
+                            return result;
+                        }, { traceStreamer: stringFlag(flags, 'trace-streamer') ?? process.env.HAPTEST_TRACE_STREAMER,
+                            refreshRate: numberFlag(flags, 'refresh-rate') }));
+                    }
+                    return actedResult(device, await action());
+                });
+            }
+            case 'plan': {
+                if (flags.execute !== undefined && flags.execute !== true) throw new CliUsageError('--execute does not take a value');
+                const task = stringFlag(flags, 'task');
+                if (!task) throw new CliUsageError('--task is required');
+                const maxSteps = numberFlag(flags, 'max-steps') ?? 10;
+                if (maxSteps < 1 || maxSteps > 50) throw new CliUsageError('--max-steps must be between 1 and 50');
+                const { createVisionQuery, runMultimodalTask } = await import('../policy/multimodal_planner');
+                const query = createVisionQuery({ model: stringFlag(flags, 'model') ?? process.env.HAPTEST_VISION_MODEL ?? '',
+                    baseURL: process.env.OPENAI_BASE_URL });
+                return await withDevice(deps, flags, async device => ok({ ok: true, report: await runMultimodalTask(device, {
+                    task, query, maxSteps, execute: flags.execute === true, output: stringFlag(flags, 'output') ?? 'out/plan',
+                }) }));
+            }
+            case 'trace': {
+                const seconds = numberFlag(flags, 'seconds') ?? 5;
+                if (seconds < 1 || seconds > 30) throw new CliUsageError('--seconds must be between 1 and 30');
+                const { captureTrace } = await import('../device/perf/trace_capture');
+                return await withDevice(deps, flags, async device => {
+                    await device.observe();
+                    return ok({ ok: true, capture: await captureTrace(device.serial, stringFlag(flags, 'output') ?? 'out/perf',
+                        () => new Promise(resolve => setTimeout(resolve, seconds * 1000)), {
+                            traceStreamer: stringFlag(flags, 'trace-streamer') ?? process.env.HAPTEST_TRACE_STREAMER,
+                            refreshRate: numberFlag(flags, 'refresh-rate'),
+                        }) });
                 });
             }
             case 'launch': {

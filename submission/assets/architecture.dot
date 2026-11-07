@@ -1,0 +1,6 @@
+digraph G {graph[rankdir=TB,bgcolor="white",pad="0.2",nodesep="0.3",ranksep="0.45"]; node[shape=box,fontname="Microsoft YaHei",fontsize=13,style="rounded,filled",fillcolor="#EAF7FD",color="#08A8F6",margin="0.14,0.1"];edge[color="#708395",arrowsize=.7];
+f[label="Fuzz CLI / Web Viewer"];r[label="RunnerManager + Policy\nPage / PTG / EventAction"];d[label="Device\nHDC / uitest / Hypium / Inspector"];
+c[label="harmony CLI / API / serve"];h[label="HarmonyDevice\n观察约束 / 租约 / 动作队列"];m[label="多模态任务规划\n截图 + 控件候选 + 历史"];v[label="图像输入模型服务",style="rounded,dashed"];
+p[label="harmony trace / swipe --measure"];t[label="hitrace / trace_streamer\nframe_slice / JSON·CSV·HTML"];
+o[label="OpenHarmony 设备与应用",fillcolor="#D9EFFB"];
+f->r->d->o;c->h->d;m->h;m->v[style=dashed];p->t->o[dir=both];{rank=same;f;c;p}{rank=same;r;h;t}}

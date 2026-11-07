@@ -1,0 +1,36 @@
+
+> haptest@0.2.3 test
+> vitest --run
+
+
+ RUN  v3.2.7 C:/Users/32147/Downloads/开源鸿蒙/HapTest/HapTest
+
+ ✓ test/unit/agent_catalog.test.ts (5 tests) 4ms
+ ✓ test/unit/glob_match.test.ts (1 test) 1ms
+ ✓ test/unit/perf_report.test.ts (1 test) 17ms
+ ✓ test/unit/directed_graph.test.ts (1 test) 2ms
+ ✓ test/unit/trace_capture.test.ts (2 tests) 27ms
+ ✓ test/unit/which.test.ts (1 test) 51ms
+ ✓ test/unit/screen_capture_stream.test.ts (3 tests) 5ms
+ ✓ test/unit/hdc_focused_text.test.ts (1 test) 3ms
+ ✓ test/unit/hdc.test.ts (3 tests) 10ms
+ ✓ test/unit/hap.test.ts (1 test) 7ms
+ ✓ test/unit/ui_viewer_server.test.ts (1 test) 139ms
+ ✓ test/unit/frame_report.test.ts (2 tests) 73ms
+ ✓ test/unit/hypium_rpc.test.ts (5 tests) 38ms
+ ✓ test/unit/device_lease.test.ts (3 tests) 304ms
+ ✓ test/unit/page_builder_normalize.test.ts (2 tests) 2ms
+ ✓ test/unit/scene_detect.test.ts (1 test) 8ms
+ ✓ test/unit/view_tree.test.ts (3 tests) 15ms
+ ✓ test/unit/serialize_utils.test.ts (2 tests) 18ms
+ ✓ test/unit/multimodal_planner.test.ts (4 tests) 37ms
+ ✓ test/unit/harmony_doctor.test.ts (4 tests) 3ms
+ ✓ test/unit/harmony_cli.test.ts (8 tests) 6ms
+ ✓ test/unit/harmony_serve.test.ts (4 tests) 5ms
+ ✓ test/unit/harmony_session.test.ts (10 tests) 39ms
+
+ Test Files  23 passed (23)
+      Tests  68 passed (68)
+   Start at  22:55:39
+   Duration  1.24s (transform 1.42s, setup 0ms, collect 8.46s, tests 815ms, environment 3ms, prepare 3.30s)
+

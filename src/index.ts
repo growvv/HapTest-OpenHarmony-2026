@@ -7,3 +7,8 @@ export { doctorHarmonyDevices } from './device/harmony/doctor';
 export type { HarmonyDoctorReport } from './device/harmony/doctor';
 export { Device } from './device/device';
 export { Fuzz } from './runner/fuzz';
+export { createVisionQuery, runMultimodalTask, planningCandidates, parsePlanDecision } from './policy/multimodal_planner';
+export type { PlanCandidate, PlanDecision, PlanningInput, VisionQuery } from './policy/multimodal_planner';
+export { readFrameDatabase, summarizeFrames, writeFrameReport } from './device/perf/frame_report';
+export type { FrameOptions, FrameReport, FrameRow } from './device/perf/frame_report';
+export { captureTrace } from './device/perf/trace_capture';

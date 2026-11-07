@@ -1,0 +1,10 @@
+
+> haptest@0.2.3 e2e
+> npm run build && node test/e2e/run.js
+
+
+> haptest@0.2.3 build
+> tsc
+
+SKIPPED: set HAPTEST_E2E_SERIAL to the target device serial.
+Find it with: hdc list targets

@@ -6,7 +6,7 @@
 
 HapTest 将页面迁移图探索、系统测试服务接入、截图与控件候选联合规划，以及逐帧性能证据组合为可扩展测试框架。参赛工作聚焦开源鸿蒙框架与工具链创新。
 
-**[完整参赛材料](submission/README.md)**　[作品简介](submission/01-参赛作品简介.md)　[设计文档](submission/SMAT团队-赛道一-开发设计文档.docx)　[答辩 PPT](submission/SMAT团队-赛道一-答辩.pptx)　[项目视频](submission/03-项目展示视频.mp4)
+**[完整参赛材料](submission/README.md)**　[作品简介](submission/01-参赛作品简介.md)　[设计文档 DOCX](submission/SMAT团队-赛道一-开发设计文档.docx)　[设计文档 PDF](submission/SMAT团队-赛道一-开发设计文档.pdf)　[答辩 PPT](submission/SMAT团队-赛道一-答辩.pptx)　[PPT PDF](submission/SMAT团队-赛道一-答辩.pdf)　[项目视频](submission/03-项目展示视频.mp4)
 
 ## 功能
 
